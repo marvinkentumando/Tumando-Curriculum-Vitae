@@ -216,8 +216,12 @@ export default function App() {
             <img 
               src={portraitDataUrl || DATA.portrait} 
               alt={DATA.name}
-              crossOrigin="anonymous"
+              referrerPolicy="no-referrer"
               className="w-32 h-32 md:w-44 md:h-44 rounded-full object-cover transition-all duration-500 border border-stone-200 shadow-xl"
+              onError={(e) => {
+                console.error("Portrait load failed");
+                e.currentTarget.src = "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
+              }}
             />
           </motion.div>
           
