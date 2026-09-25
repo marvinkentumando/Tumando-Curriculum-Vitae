@@ -1,8 +1,10 @@
 import { motion } from "motion/react";
+import { useRef, useState, useEffect } from "react";
+import { toPng } from "html-to-image";
 import { 
   Mail, Phone, MapPin, Linkedin, ExternalLink, 
   Award, BookOpen, Briefcase, Code, GraduationCap, 
-  Printer, ScrollText, Trophy, Presentation
+  Printer, ScrollText, Trophy, Presentation, Image as ImageIcon, Loader2
 } from "lucide-react";
 
 const DATA = {
@@ -112,12 +114,87 @@ const Entry = ({ title, subtitle, period, highlights = [], tech = "" }: any) => 
 );
 
 export default function App() {
+  const cvRef = useRef<HTMLDivElement>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [portraitDataUrl, setPortraitDataUrl] = useState<string | null>(null);
+
   const handlePrint = () => window.print();
+
+  // Pre-convert portrait to Data URL to avoid CORS issues during capture
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        try {
+          setPortraitDataUrl(canvas.toDataURL('image/jpeg'));
+        } catch (e) {
+          console.warn("Could not convert portrait to data URL:", e);
+        }
+      }
+    };
+    img.src = DATA.portrait;
+  }, []);
+
+  const handleDownloadImage = async () => {
+    if (!cvRef.current) return;
+    
+    setIsCapturing(true);
+    try {
+      // Ensure fonts are loaded
+      await document.fonts.ready;
+      
+      // Small delay to ensure any animations settle
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      const dataUrl = await toPng(cvRef.current, {
+        quality: 0.95,
+        pixelRatio: 2,
+        backgroundColor: '#FBF9F5',
+        cacheBust: true,
+        // If image fails, it might be due to a specific element. 
+        // We can try to catch common serialization errors here.
+      });
+      
+      const link = document.createElement('a');
+      link.download = `Marvin_Ken_Tumando_CV.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err: any) {
+      console.error('Detailed capture error:', err);
+      
+      // If it's a DOM event (like isTrusted: true), it's likely an image load error
+      let errorMessage = 'Unknown error during capture';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (err && typeof err === 'object') {
+        errorMessage = JSON.stringify(err);
+        if (err.isTrusted) errorMessage = "An image or asset failed to load (CORS/Network error)";
+      }
+      
+      alert(`Capture failed: ${errorMessage}. Try using "Print PDF" instead if this persists.`);
+    } finally {
+      setIsCapturing(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#FBF9F5] text-[#1C1917] selection:bg-stone-200 font-sans">
       {/* Floating UI */}
       <div className="fixed top-6 right-6 z-50 print:hidden flex gap-4">
+        <button 
+          onClick={handleDownloadImage}
+          disabled={isCapturing}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-stone-200 rounded-full shadow-sm hover:shadow-md transition-all active:scale-95 group text-sm font-medium text-stone-600 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isCapturing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+          {isCapturing ? 'Capturing...' : 'Save Image'}
+        </button>
         <button 
           onClick={handlePrint}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-stone-200 rounded-full shadow-sm hover:shadow-md transition-all active:scale-95 group text-sm font-medium text-stone-600"
@@ -127,7 +204,7 @@ export default function App() {
         </button>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-12 md:py-24 lg:py-32">
+      <div ref={cvRef} className="max-w-5xl mx-auto px-6 py-12 md:py-24 lg:py-32 bg-[#FBF9F5]">
         {/* Header */}
         <header className="mb-24 grid grid-cols-1 md:grid-cols-[auto_1fr_auto] gap-10 items-center border-b-[3px] border-double border-stone-900 pb-16">
           <motion.div 
@@ -137,8 +214,9 @@ export default function App() {
             className="relative"
           >
             <img 
-              src={DATA.portrait} 
+              src={portraitDataUrl || DATA.portrait} 
               alt={DATA.name}
+              crossOrigin="anonymous"
               className="w-32 h-32 md:w-44 md:h-44 rounded-full object-cover transition-all duration-500 border border-stone-200 shadow-xl"
             />
           </motion.div>
